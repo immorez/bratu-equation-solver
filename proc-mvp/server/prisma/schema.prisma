@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth & Users ────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(BUYER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rfqs Rfq[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  BUYER
+  VIEWER
+}
+
+// ─── Vendors ─────────────────────────────────────────────────
+
+model Vendor {
+  id                   String       @id @default(uuid())
+  companyName          String
+  country              String
+  website              String?
+  address              String?
+  companySize          String?
+  yearsInBusiness      Int?
+  manufacturingCapacity String?
+  minimumOrderQuantity String?
+  leadTime             String?
+  qualityScore         Float        @default(0)
+  reliabilityScore     Float        @default(0)
+  performanceScore     Float        @default(0)
+  responseRate         Float        @default(0)
+  status               VendorStatus @default(DISCOVERED)
+  discoveryDate        DateTime     @default(now())
+  lastContact          DateTime?
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  contacts       VendorContact[]
+  certifications VendorCertification[]
+  products       VendorProduct[]
+  communications Communication[]
+  quotes         Quote[]
+
+  @@map("vendors")
+}
+
+enum VendorStatus {
+  DISCOVERED
+  CONTACTED
+  ACTIVE
+  INACTIVE
+}
+
+model VendorContact {
+  id       String @id @default(uuid())
+  vendorId String
+  type     String // email, phone
+  value    String
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("vendor_contacts")
+}
+
+model VendorCertification {
+  id       String @id @default(uuid())
+  vendorId String
+  name     String
+  issuedBy String?
+  validUntil DateTime?
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("vendor_certifications")
+}
+
+model VendorProduct {
+  id              String @id @default(uuid())
+  vendorId        String
+  productCategory String
+  specifications  Json?
+  priceRange      Json?
+  moq             Int?
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("vendor_products")
+}
+
+// ─── Communications ──────────────────────────────────────────
+
+model Communication {
+  id           String            @id @default(uuid())
+  vendorId     String
+  type         CommunicationType
+  subject      String?
+  content      String
+  recipient    String?            // email or phone number used
+  response     String?
+  responseTime Int? // in hours
+  sentAt       DateTime          @default(now())
+  respondedAt  DateTime?
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("communications")
+}
+
+enum CommunicationType {
+  EMAIL
+  WHATSAPP
+  CALL
+  RFQ
+  ORDER
+}
+
+// ─── RFQs ────────────────────────────────────────────────────
+
+model Rfq {
+  id                    String    @id @default(uuid())
+  rfqNumber             String    @unique
+  requestedById         String
+  status                RfqStatus @default(DRAFT)
+  priority              Priority  @default(MEDIUM)
+  deliveryLocation      String
+  requiredDeliveryDate  DateTime?
+  budgetMin             Float?
+  budgetMax             Float?
+  budgetCurrency        String    @default("USD")
+  qualityRequirements   String[]
+  paymentTermsPreference String?
+  notes                 String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  requestedBy User       @relation(fields: [requestedById], references: [id])
+  lineItems   RfqLineItem[]
+  quotes      Quote[]
+
+  @@map("rfqs")
+}
+
+enum RfqStatus {
+  DRAFT
+  SENT
+  QUOTING
+  NEGOTIATING
+  COMPARING
+  COMPLETED
+  CANCELLED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model RfqLineItem {
+  id             String @id @default(uuid())
+  rfqId          String
+  productName    String
+  specifications Json?
+  quantity       Int
+  unit           String @default("pieces")
+
+  rfq Rfq @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+
+  @@map("rfq_line_items")
+}
+
+// ─── Quotes ──────────────────────────────────────────────────
+
+model Quote {
+  id            String      @id @default(uuid())
+  rfqId         String
+  vendorId      String
+  unitPrice     Float
+  totalPrice    Float
+  currency      String      @default("USD")
+  leadTimeDays  Int
+  paymentTerms  String?
+  notes         String?
+  status        QuoteStatus @default(RECEIVED)
+  receivedAt    DateTime    @default(now())
+  validUntil    DateTime?
+
+  rfq    Rfq    @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@map("quotes")
+}
+
+enum QuoteStatus {
+  RECEIVED
+  UNDER_REVIEW
+  NEGOTIATING
+  ACCEPTED
+  REJECTED
+}
+
+// ─── Vendor Discovery ───────────────────────────────────────
+
+model DiscoveryJob {
+  id                  String             @id @default(uuid())
+  status              DiscoveryJobStatus @default(PENDING)
+  need                String?            // Procurement need / requirement driving product recommendations
+  productCategories   String[]
+  targetCountries     String[]
+  searchQueries       String[]
+  maxVendorsPerQuery  Int                @default(10)
+  autoImport          Boolean            @default(false)
+  autoImportThreshold Float              @default(0.8)
+  discoveryMode       String             @default("mock")
+  totalFound          Int                @default(0)
+  totalNew            Int                @default(0)
+  totalSkipped        Int                @default(0)
+  totalImported       Int                @default(0)
+  progress            Float              @default(0)
+  error               String?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  results  DiscoveryResult[]
+  products DiscoveryProduct[]
+
+  @@map("discovery_jobs")
+}
+
+// Products and alternatives discovered per job (from SERP, vendors, queries)
+model DiscoveryProduct {
+  id                String   @id @default(uuid())
+  jobId             String
+  productCategory   String   // Matches job productCategories
+  name              String   // Product name/title
+  description       String?
+  price             Float
+  priceCurrency     String   @default("USD")
+  source            String   // "serp" | "vendor" | "result"
+  sourceUrl         String?
+  sourceVendor      String?  // Vendor/seller name
+  resultId          String?  // Link to DiscoveryResult if from vendor
+  alternativeGroup  String?  // Groups products as alternatives (same need)
+  createdAt         DateTime @default(now())
+
+  job    DiscoveryJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  result DiscoveryResult? @relation(fields: [resultId], references: [id], onDelete: SetNull)
+
+  @@map("discovery_products")
+}
+
+enum DiscoveryJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model DiscoveryResult {
+  id                String   @id @default(uuid())
+  jobId             String
+  vendorId          String?
+  companyName       String
+  country           String?
+  website           String?
+  email             String?
+  phone             String?
+  description       String?
+  productCategories String[]
+  certifications    String[]
+  companySize       String?
+  yearsInBusiness   Int?
+  sourceUrl         String?
+  source            String   @default("mock")
+  confidence        Float    @default(0)
+  imported          Boolean  @default(false)
+  skipped           Boolean  @default(false)
+  skipReason        String?
+  rawData           Json?
+  // Price discovery from SerpAPI Google Shopping (high-confidence SERP data)
+  priceMin          Float?
+  priceMax          Float?
+  priceCurrency     String?  @default("USD")
+  priceDiscovery    Json?    // Full SERP shopping results for audit
+  createdAt         DateTime @default(now())
+
+  job       DiscoveryJob    @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  products  DiscoveryProduct[]
+
+  @@map("discovery_results")
+}
