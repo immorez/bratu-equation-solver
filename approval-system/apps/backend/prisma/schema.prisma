@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  employee
+  manager
+}
+
+enum RequestStatus {
+  draft
+  pending
+  approved
+  rejected
+  needs_revision
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(255)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         UserRole @default(employee)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  createdRequests  Request[]      @relation("RequestCreator")
+  assignedRequests Request[]      @relation("RequestAssignee")
+  comments         Comment[]
+  notifications    Notification[]
+  statusEvents     RequestStatusEvent[]
+
+  @@map("users")
+}
+
+model Request {
+  id          String        @id @default(uuid()) @db.Uuid
+  title       String        @db.VarChar(500)
+  description String        @db.Text
+  amount      Decimal?      @db.Decimal(15, 2)
+  status      RequestStatus @default(draft)
+  createdById String        @map("created_by") @db.Uuid
+  assignedToId String?      @map("assigned_to") @db.Uuid
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  createdBy   User          @relation("RequestCreator", fields: [createdById], references: [id])
+  assignedTo  User?         @relation("RequestAssignee", fields: [assignedToId], references: [id])
+  attachments Attachment[]
+  comments    Comment[]
+  notifications Notification[]
+  statusEvents  RequestStatusEvent[]
+
+  @@index([createdById])
+  @@index([status])
+  @@index([createdAt])
+  @@map("requests")
+}
+
+model Attachment {
+  id         String   @id @default(uuid()) @db.Uuid
+  requestId  String   @map("request_id") @db.Uuid
+  filename   String   @db.VarChar(500)
+  filepath   String   @db.VarChar(1000)
+  mimetype   String   @db.VarChar(255)
+  size       Int
+  iv         String   @db.VarChar(64)
+  authTag    String   @map("auth_tag") @db.VarChar(64)
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("attachments")
+}
+
+model Comment {
+  id        String   @id @default(uuid()) @db.Uuid
+  requestId String   @map("request_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid
+  body      String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([requestId])
+  @@map("comments")
+}
+
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  requestId String?  @map("request_id") @db.Uuid
+  message   String   @db.Text
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User     @relation(fields: [userId], references: [id])
+  request Request? @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model RequestStatusEvent {
+  id         String        @id @default(uuid()) @db.Uuid
+  requestId  String        @map("request_id") @db.Uuid
+  fromStatus RequestStatus? @map("from_status")
+  toStatus   RequestStatus @map("to_status")
+  actorId    String        @map("actor_id") @db.Uuid
+  comment    String?       @db.Text
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  actor   User    @relation(fields: [actorId], references: [id])
+
+  @@index([requestId])
+  @@map("request_status_events")
+}

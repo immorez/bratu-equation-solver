@@ -1,0 +1,28 @@
+{
+  "name": "approval-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "سامد - SAMED",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --filter=./apps/*",
+    "build": "turbo run build --filter=./apps/*",
+    "lint": "turbo run lint --filter=./apps/*",
+    "start": "turbo run start --filter=./apps/*",
+    "db:migrate": "npm run db:migrate -w @approval-system/backend",
+    "db:seed": "npm run db:seed -w @approval-system/backend",
+    "db:studio": "npm run db:studio -w @approval-system/backend",
+    "db:generate": "npm run db:generate -w @approval-system/backend",
+    "clean": "turbo run clean --filter=./apps/* && rimraf node_modules .turbo"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "turbo": "^2.3.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.5.0"
+}

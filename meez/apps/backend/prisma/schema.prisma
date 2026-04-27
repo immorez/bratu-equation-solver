@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum MeetingStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  ARCHIVED
+  CANCELLED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  role      Role     @default(USER)
+  orgId     String?  @map("org_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organizedMeetings Meeting[]     @relation("Organizer")
+  participations    Participant[]
+  documents         Document[]    @relation("Uploader")
+
+  @@map("users")
+}
+
+model Meeting {
+  id          String        @id @default(uuid())
+  title       String
+  description String?
+  startTime   DateTime      @map("start_time")
+  endTime     DateTime?     @map("end_time")
+  status      MeetingStatus @default(PLANNED)
+  organizerId String        @map("organizer_id")
+  orgId       String?       @map("org_id")
+  roomId      String?       @map("room_id")
+  agenda      Json?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  organizer    User          @relation("Organizer", fields: [organizerId], references: [id])
+  participants Participant[]
+  transcript   Transcript?
+  documents    Document[]
+  invitations  Invitation[]
+
+  @@index([organizerId])
+  @@index([status])
+  @@index([startTime])
+  @@map("meetings")
+}
+
+model Participant {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  meetingId String    @map("meeting_id")
+  joinedAt  DateTime? @map("joined_at")
+  leftAt    DateTime? @map("left_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id])
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, meetingId])
+  @@map("participants")
+}
+
+model Transcript {
+  id        String   @id @default(uuid())
+  meetingId String   @unique @map("meeting_id")
+  chunks    Json     @default("[]")
+  insights  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@map("transcripts")
+}
+
+model Document {
+  id           String   @id @default(uuid())
+  meetingId    String   @map("meeting_id")
+  filename     String
+  originalName String   @map("original_name")
+  mimeType     String   @map("mime_type")
+  size         Int
+  url          String
+  summary      String?
+  uploadedBy   String   @map("uploaded_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  meeting  Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  uploader User    @relation("Uploader", fields: [uploadedBy], references: [id])
+
+  @@index([meetingId])
+  @@map("documents")
+}
+
+model Invitation {
+  id          String           @id @default(uuid())
+  meetingId   String           @map("meeting_id")
+  email       String
+  token       String           @unique @default(uuid())
+  status      InvitationStatus @default(PENDING)
+  respondedAt DateTime?        @map("responded_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId])
+  @@index([email])
+  @@map("invitations")
+}
